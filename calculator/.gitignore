@@ -1,0 +1,9 @@
+# binary
+*.o
+*.a
+*.so
+test
+
+# binary info
+*.dump
+*.elf
