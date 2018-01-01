@@ -1,10 +1,4 @@
-all: libcalc.a
-
-test: test.o libcalc.a
-	$(CC) -o $@ $^
-
-libcalc.a: add.o multiply.o
-	$(AR) -rs $@ $^
+all: test
 
 multiply.o: multiply.c multiply.h add.h
 	$(CC) -c -o $@ $<
