@@ -1,5 +1,8 @@
 all: test
 
+libcalc.a: add.o multiply.o
+	$(AR) -rs $@ $^
+
 multiply.o: multiply.c multiply.h add.h
 	$(CC) -c -o $@ $<
 
