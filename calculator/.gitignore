@@ -3,6 +3,7 @@
 *.a
 *.so
 test
+run
 
 # binary info
 *.dump
