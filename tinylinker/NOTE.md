@@ -5,8 +5,6 @@ which is based on the license below.
 
 elf\_common.h and elfstructs.h follow their own license.
 
-The incremental part of this code also follows the license below.
-
 ----
 
 The MIT License
