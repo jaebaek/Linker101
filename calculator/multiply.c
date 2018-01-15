@@ -6,7 +6,7 @@ int multiply(int a, int b) {
     int i = 0;
 
     for (i = 0; i < b; ++i) {
-        result += a;
+        result = add(result, a);
     }
     return result;
 }
