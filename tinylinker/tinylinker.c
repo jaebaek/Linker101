@@ -145,33 +145,29 @@ uint64_t find_dynamic(Elf64_Ehdr *ehdr, Elf64_Phdr *phdr)
     return 0;
 }
 
-uint32_t update_dynsym(Elf64_Shdr *shdr, uint32_t shnum, Elf64_Sym *sym, uint64_t symtab)
+uint32_t update_dynsym(uint64_t symtabsz, Elf64_Sym *sym, uint64_t symtab)
 {
     unsigned i;
-    uint32_t symtabsz = 0;
     uint64_t sym_vaddr;
-
-    /* get symbol table size */
-    for (i = 0; i < shnum; ++i) {
-        if (shdr[i].sh_addr == symtab) {
-            symtabsz = shdr[i].sh_size;
-            break;
-        }
-    }
-    if (symtabsz == 0) {
-        dlog_i("%u: .dynsym has 0 size", __LINE__);
-        return 0;
-    }
 
     /* iterate .dynsym */
     for (i = 1; i < symtabsz/sizeof(Elf64_Sym); ++i) {
         if (sym[i].st_shndx == SHN_UNDEF) {
             sym_vaddr = 0;
-            /* get symbol from pre-define set */
             /* get symbol from another shared lib */
                 // dlog("%u th symbol in .dynsym is not found", i);
+            /* get symbol from pre-define set */
         }
     }
+}
+
+uint64_t get_symtab_size(Elf64_Shdr *shdr, uint32_t shnum, uint64_t symtab)
+{
+    unsigned i;
+    for (i = 0; i < shnum; ++i)
+        if (shdr[i].sh_addr == symtab)
+            return shdr[i].sh_size;
+    return 0;
 }
 
 //void Loader::get_symbols(extsym_t *esym, size_t nesym)
@@ -288,6 +284,7 @@ void *tlopen(const char *name,  tltype_t type) {
     uint64_t dynamic;
     Elf64_Dyn *dyn;
     Elf64_Sym *sym;
+    Elf64_Shdr *shdr;
 
     if (type != TL_ELF_TYPE_EXEC && type != TL_ELF_TYPE_SHARED)
         return NULL;
@@ -317,10 +314,17 @@ void *tlopen(const char *name,  tltype_t type) {
     dyn = (Elf64_Dyn *)((uint64_t) handle->vaddr_base + dynamic);
     read_dynamic(dyn, &handle->dyn);
 
+    /* get symbol table size */
+    shdr = (Elf64_Shdr *) ((uint64_t) handle->memmap + (uint64_t) handle->ehdr->e_shoff);
+    handle->symtabsz = get_symtab_size(shdr, handle->ehdr->e_shnum, handle->dyn.symtab);
+    if (!handle->symtabsz) {
+        dlog("%u: symbol table size is 0", __LINE__);
+        return NULL;
+    }
+
     /* update symbol table --> fill undefined symbol locations */
-    handle->shdr = (Elf64_Shdr *) ((uint64_t) handle->memmap + (uint64_t) handle->ehdr->e_shoff);
     sym = (Elf64_Sym *)((uint64_t) handle->memmap + handle->dyn.symtab);
-    update_dynsym(handle->shdr, handle->ehdr->e_shnum, sym, handle->dyn.symtab);
+    update_dynsym(handle->symtabsz, sym, handle->dyn.symtab);
 
     /* relocate */
     relocate((Elf64_Sym *)((uint64_t) handle->vaddr_base + handle->dyn.symtab),

@@ -25,7 +25,7 @@ typedef struct tl_handle {
     // ELF
     Elf64_Ehdr *ehdr;
     Elf64_Phdr *phdr;
-    Elf64_Shdr *shdr;
+    uint64_t symtabsz;
 
     // load
     void *vaddr_base;
