@@ -3,6 +3,9 @@
 
 int main(int argc, const char *argv[])
 {
-    void* handle = tlopen("./program/libcalc.so", TL_ELF_TYPE_SHARED);
-    return 0;
+    void* handle0 = tlopen("./program/libcalc.so");
+    void* handle1 = tlopen("./program/test");
+
+    int (*test_main)() = (int (*)()) tlentry(handle1);
+    return test_main();
 }

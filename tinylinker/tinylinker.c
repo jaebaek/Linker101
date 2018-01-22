@@ -39,6 +39,10 @@
 #include "tinylinker.h"
 #include "tinylinker_internal.h"
 
+#define HANDLES_SIZE 10
+static uint32_t nhandles = 0;
+static tlhandle_t *handles[HANDLES_SIZE];
+
 uint64_t file_size(int fd) {
     struct stat buf;
     fstat(fd, &buf);
@@ -55,7 +59,7 @@ uint64_t get_pages(uint64_t n) {
 #define GET_OBJ(type, base, offset) \
      (type*) ((uint64_t)(base) + (uint64_t)(offset))
 
-bool validate_ehdr(Elf64_Ehdr *ehdr, tltype_t type)
+bool validate_ehdr(Elf64_Ehdr *ehdr)
 {
     static const unsigned char expected[EI_NIDENT] =
     {
@@ -81,8 +85,8 @@ bool validate_ehdr(Elf64_Ehdr *ehdr, tltype_t type)
         return false;
     }
     /* ELF format check - dynamic library */
-    if (ehdr->e_type != (type == TL_ELF_TYPE_SHARED ? ET_DYN : ET_EXEC)) {
-        dlog("%u: Ehdr not relocatable", __LINE__);
+    if (ehdr->e_type != ET_DYN) {
+        dlog("%u: Ehdr not shared library", __LINE__);
         return false;
     }
     /* check the architecture - currently only support x86_64 */
@@ -163,20 +167,33 @@ uint64_t find_symbol_from_lib(tlhandle_t *handle, const char *name)
     return 0;
 }
 
-uint32_t update_dynsym(uint64_t symtabsz, Elf64_Sym *sym, uint64_t symtab, uint64_t base)
+uint32_t update_dynsym(uint64_t symtabsz, Elf64_Sym *sym, uint64_t symtab, uint64_t base,
+        const char *strtab)
 {
     unsigned i;
+    unsigned j;
     uint64_t sym_vaddr;
 
     /* iterate .dynsym */
     for (i = 1; i < symtabsz/sizeof(Elf64_Sym); ++i) {
         if (sym[i].st_shndx == SHN_UNDEF) {
             sym_vaddr = 0;
+
             /* get symbol from another shared lib */
-                // dlog("%u th symbol in .dynsym is not found", i);
+            for (j = 0; j < nhandles; ++j) {
+                sym_vaddr = find_symbol_from_lib(handles[j], &strtab[sym[i].st_name]);
+                if (sym_vaddr) {
+                    sym[i].st_value = sym_vaddr;
+                    dlog_i("%u: %s, %lx", i, &strtab[sym[i].st_name], sym[i].st_value);
+                }
+            }
+
             /* get symbol from pre-define set */
+            if (strcmp(&strtab[sym[i].st_name], "printf"))
+                sym[i].st_value = (uint64_t) printf;
         } else {
             sym[i].st_value += base;
+            dlog_i("%u: %s, %lx", i, &strtab[sym[i].st_name], sym[i].st_value);
         }
     }
 }
@@ -184,26 +201,12 @@ uint32_t update_dynsym(uint64_t symtabsz, Elf64_Sym *sym, uint64_t symtab, uint6
 uint64_t get_symtab_size(Elf64_Shdr *shdr, uint32_t shnum, uint64_t symtab)
 {
     unsigned i;
-    for (i = 0; i < shnum; ++i)
+    for (i = 0; i < shnum; ++i) {
         if (shdr[i].sh_addr == symtab)
             return shdr[i].sh_size;
+    }
     return 0;
 }
-
-//void Loader::get_symbols(extsym_t *esym, size_t nesym)
-//{
-//    Elf64_Sym *sym = (Elf64_Sym *)(encl_base + dinfo.symtab);
-//    char *strtab = (char *)(encl_base + dinfo.strtab);
-//    for (unsigned i = 1; i < dinfo.symtabsz/sizeof(Elf64_Sym); ++i) {
-//        if (sym[i].st_shndx != SHN_UNDEF) {
-//            for (unsigned j = 0;j < nesym;++j)
-//                if (!strcmp(esym[j].name, &strtab[sym[i].st_name])) {
-//                    *(esym[j].value) = sym[i].st_value;
-//                    dlog("%s is %lx\n", esym[j].name, *(esym[j].value));
-//                }
-//        }
-//    }
-//}
 
 #define GET_DT(elem) \
     dinfo->elem = (uint64_t)e->d_un.d_ptr; break
@@ -215,8 +218,7 @@ bool read_dynamic(Elf64_Dyn *dyn, dyninfo_t *dinfo)
     for (e = dyn;e->d_tag != DT_NULL;++e) {
         switch (e->d_tag) {
             case DT_NEEDED:
-                dlog("%u: DT_NEEDED (dynamic linking) is not supported", __LINE__);
-                return false;
+                continue;
             case DT_HASH: GET_DT(hash);
 
             //---- symbol and relocation tables related ----
@@ -247,15 +249,12 @@ bool read_dynamic(Elf64_Dyn *dyn, dyninfo_t *dinfo)
             case DT_TEXTREL: break;
             case DT_RELACOUNT: GET_DT(relacount);
             default:
-                dlog("%u: not supported d_tag: %ld", __LINE__, e->d_tag);
-                return false;
+                dlog_i("%u: not supported d_tag: %ld", __LINE__, e->d_tag);
+                break;
         }
     }
 
     return true;
-//    /* update values of special symbols in .dynsym */
-//    update_dynsym(dinfo.symtab, (char *)(encl_base + dinfo.strtab),
-//            spec_dsym, nspec_dsym);
 }
 
 void relocate(Elf64_Sym *symtab, Elf64_Rela *reltab, unsigned nrel, uint64_t vaddr_base)
@@ -299,15 +298,12 @@ void relocate(Elf64_Sym *symtab, Elf64_Rela *reltab, unsigned nrel, uint64_t vad
     }
 }
 
-void *tlopen(const char *name,  tltype_t type) {
+void *tlopen(const char *name) {
     tlhandle_t *handle;
     uint64_t dynamic;
     Elf64_Dyn *dyn;
     Elf64_Sym *sym;
     Elf64_Shdr *shdr;
-
-    if (type != TL_ELF_TYPE_EXEC && type != TL_ELF_TYPE_SHARED)
-        return NULL;
 
     /* mmap ELF file */
     handle = (tlhandle_t *) malloc(sizeof(tlhandle_t));
@@ -319,7 +315,7 @@ void *tlopen(const char *name,  tltype_t type) {
 
     /* check ELF header */
     handle->ehdr = (Elf64_Ehdr *) handle->memmap;
-    validate_ehdr(handle->ehdr, type);
+    validate_ehdr(handle->ehdr);
 
     /* load based program header */
     handle->phdr = (Elf64_Phdr *) ((uint64_t) handle->memmap + (uint64_t) handle->ehdr->e_phoff);
@@ -344,12 +340,25 @@ void *tlopen(const char *name,  tltype_t type) {
 
     /* update symbol table --> fill undefined symbol locations */
     sym = (Elf64_Sym *)((uint64_t) handle->memmap + handle->dyn.symtab);
-    update_dynsym(handle->symtabsz, sym, handle->dyn.symtab, (uint64_t) handle->vaddr_base);
+    update_dynsym(handle->symtabsz, sym, handle->dyn.symtab, (uint64_t) handle->vaddr_base,
+            (const char *) ((uint64_t) handle->memmap + handle->dyn.strtab));
 
     /* relocate */
     relocate(sym, (Elf64_Rela *)((uint64_t) handle->memmap + handle->dyn.jmprel),
             handle->dyn.pltrelsz / sizeof(Elf64_Rela), (uint64_t) handle->vaddr_base);
 
-    int (*f)(int, int) = (int (*)(int, int) ) find_symbol_from_lib(handle, "multiply");
-    printf("3 X 4 = %d\n", f(3, 4));
+    /* keep open handle */
+    if (nhandles < HANDLES_SIZE) {
+        handles[nhandles++] = handle;
+    }
+
+    return handle;
+}
+
+void *tlentry(void *ptr) {
+    tlhandle_t *handle;
+    if (!ptr)
+        return NULL;
+    handle = (tlhandle_t *) ptr;
+    return (void *) ((uint64_t) handle->vaddr_base + handle->ehdr->e_entry);
 }
