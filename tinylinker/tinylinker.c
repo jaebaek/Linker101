@@ -145,7 +145,25 @@ uint64_t find_dynamic(Elf64_Ehdr *ehdr, Elf64_Phdr *phdr)
     return 0;
 }
 
-uint32_t update_dynsym(uint64_t symtabsz, Elf64_Sym *sym, uint64_t symtab)
+uint64_t find_symbol_from_lib(tlhandle_t *handle, const char *name)
+{
+    unsigned i;
+    Elf64_Sym *sym;
+    const char *strtab;
+
+    sym = (Elf64_Sym *)((uint64_t) handle->memmap + handle->dyn.symtab);
+    strtab = (const char *)((uint64_t) handle->memmap + handle->dyn.strtab);
+    for (i = 1; i < handle->symtabsz/sizeof(Elf64_Sym); ++i) {
+        dlog_i("symbol %u: %s", i, &strtab[sym[i].st_name]);
+        if (!strcmp(name, &strtab[sym[i].st_name])) {
+            dlog_i("find symbol %u: %s", i, &strtab[sym[i].st_name]);
+            return sym[i].st_value;
+        }
+    }
+    return 0;
+}
+
+uint32_t update_dynsym(uint64_t symtabsz, Elf64_Sym *sym, uint64_t symtab, uint64_t base)
 {
     unsigned i;
     uint64_t sym_vaddr;
@@ -157,6 +175,8 @@ uint32_t update_dynsym(uint64_t symtabsz, Elf64_Sym *sym, uint64_t symtab)
             /* get symbol from another shared lib */
                 // dlog("%u th symbol in .dynsym is not found", i);
             /* get symbol from pre-define set */
+        } else {
+            sym[i].st_value += base;
         }
     }
 }
@@ -324,11 +344,12 @@ void *tlopen(const char *name,  tltype_t type) {
 
     /* update symbol table --> fill undefined symbol locations */
     sym = (Elf64_Sym *)((uint64_t) handle->memmap + handle->dyn.symtab);
-    update_dynsym(handle->symtabsz, sym, handle->dyn.symtab);
+    update_dynsym(handle->symtabsz, sym, handle->dyn.symtab, (uint64_t) handle->vaddr_base);
 
     /* relocate */
-    relocate((Elf64_Sym *)((uint64_t) handle->vaddr_base + handle->dyn.symtab),
-            (Elf64_Rela *)((uint64_t) handle->vaddr_base + handle->dyn.jmprel),
-            handle->dyn.pltrelsz / sizeof(Elf64_Rela),
-            (uint64_t) handle->vaddr_base);
+    relocate(sym, (Elf64_Rela *)((uint64_t) handle->memmap + handle->dyn.jmprel),
+            handle->dyn.pltrelsz / sizeof(Elf64_Rela), (uint64_t) handle->vaddr_base);
+
+    int (*f)(int, int) = (int (*)(int, int) ) find_symbol_from_lib(handle, "multiply");
+    printf("3 X 4 = %d\n", f(3, 4));
 }
