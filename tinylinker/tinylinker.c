@@ -1,49 +1,25 @@
 #include <stdint.h>
 #include <stdbool.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <stdlib.h>
+#include <string.h>
+#include <endian.h>
+#include <stdio.h>
 
 #include "elf_common.h"
 #include "elfstructs.h"
 
-/* man 2 open */
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-
-/* man 2 stat, read */
-#include <unistd.h>
-
-/* man 2 mmap */
-#include <sys/mman.h>
-
-/* man 3 malloc */
-#include <stdlib.h>
-
-/* man 3 memcpy */
-#include <string.h>
-
-#include <endian.h>
-#if BYTE_ORDER == BIG_ENDIAN
-# define byteorder ELFDATA2MSB
-#elif BYTE_ORDER == LITTLE_ENDIAN
-# define byteorder ELFDATA2LSB
-#else
-# error "Unknown BYTE_ORDER " BYTE_ORDER
-# define byteorder ELFDATANONE
-#endif
-
-#include <stdio.h>
-
-#define dlog(msg, ...) printf(msg "\n", __VA_ARGS__)
-#define dlog_i
-
 #include "tinylinker.h"
 #include "tinylinker_internal.h"
 
-#define HANDLES_SIZE 10
 static uint32_t nhandles = 0;
 static tlhandle_t *handles[HANDLES_SIZE];
 
-uint64_t file_size(int fd) {
+static uint64_t file_size(int fd) {
     struct stat buf;
     fstat(fd, &buf);
     return buf.st_size;
@@ -51,13 +27,10 @@ uint64_t file_size(int fd) {
 
 #define PAGE_SIZE 0x1000
 
-uint64_t get_pages(uint64_t n) {
+static inline uint64_t get_pages(uint64_t n) {
     if (n % PAGE_SIZE == 0) return n;
     return ((n / PAGE_SIZE) + 1) * PAGE_SIZE;
 }
-
-#define GET_OBJ(type, base, offset) \
-     (type*) ((uint64_t)(base) + (uint64_t)(offset))
 
 bool validate_ehdr(Elf64_Ehdr *ehdr)
 {
@@ -189,8 +162,10 @@ uint32_t update_dynsym(uint64_t symtabsz, Elf64_Sym *sym, uint64_t symtab, uint6
             }
 
             /* get symbol from pre-define set */
-            if (strcmp(&strtab[sym[i].st_name], "printf"))
+            if (!strcmp(&strtab[sym[i].st_name], "printf")) {
                 sym[i].st_value = (uint64_t) printf;
+                dlog_i("%u: %s, %lx\n", &strtab[sym[i].st_name], sym[i].st_value);
+            }
         } else {
             sym[i].st_value += base;
             dlog_i("%u: %s, %lx", i, &strtab[sym[i].st_name], sym[i].st_value);

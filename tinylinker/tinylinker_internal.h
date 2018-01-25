@@ -1,3 +1,17 @@
+#if BYTE_ORDER == BIG_ENDIAN
+# define byteorder ELFDATA2MSB
+#elif BYTE_ORDER == LITTLE_ENDIAN
+# define byteorder ELFDATA2LSB
+#else
+# error "Unknown BYTE_ORDER " BYTE_ORDER
+# define byteorder ELFDATANONE
+#endif
+
+#define dlog(msg, ...) printf(msg "\n", __VA_ARGS__)
+#define dlog_i
+
+#define HANDLES_SIZE 10
+
 /* data used in dynamic linking */
 struct dynlink_info {
     uint64_t hash; // TODO: currently, .hash is not used .. improve performance! */

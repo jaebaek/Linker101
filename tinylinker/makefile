@@ -12,7 +12,8 @@ main.o: main.c tinylinker.h
 tinylinker.a: tinylinker.o
 	$(AR) -rs -o $@ $^
 
-tinylinker.o: tinylinker.c tinylinker.h
+tinylinker.o: tinylinker.c tinylinker.h elf_common.h \
+	elfstructs.h tinylinker_internal.h
 	$(CC) -o $@ -c $<
 
 clean:
