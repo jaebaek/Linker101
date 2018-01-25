@@ -81,34 +81,15 @@ void *load(Elf64_Ehdr *ehdr, Elf64_Phdr *phdr)
     uint64_t load_end = 0;
     uint64_t file = (uint64_t) ehdr;
 
-    for (i = 0;i < ehdr->e_phnum;++i) {
-        if (phdr[i].p_type == PT_LOAD && load_end < phdr[i].p_vaddr + phdr[i].p_memsz)
-            load_end = phdr[i].p_vaddr + phdr[i].p_memsz;
-    }
-
-    if (load_end) {
-        vaddr_base = (uint64_t) mmap(NULL, get_pages(load_end),
-                PROT_READ | PROT_WRITE | PROT_EXEC,
-                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    } else
-        return NULL;
-
-    for (i = 0;i < ehdr->e_phnum;++i) {
-        if (phdr[i].p_type == PT_LOAD) {
-            memcpy((void *)(vaddr_base + phdr[i].p_vaddr),
-                   (void *)(file + phdr[i].p_offset),
-                    phdr[i].p_filesz);
-            if (phdr[i].p_filesz < phdr[i].p_memsz)
-                bzero((void *)(vaddr_base + phdr[i].p_vaddr + phdr[i].p_filesz),
-                        phdr[i].p_memsz - phdr[i].p_filesz);
-
-            /* TODO: permission setup
-               mprotect(((phdr[i].p_flags & PF_R) ? PROT_EXEC : 0) |
-               ((phdr[i].p_flags & PF_W) ? PROT_WRITE : 0) |
-               ((phdr[i].p_flags & PF_X) ? PROT_READ : 0))
-               */
-        }
-    }
+    /* TODO:
+     * 1. Determine the total segment size
+     *      --> p_type == PT_LOAD
+     *      --> 
+     * 2. Allocate memory
+     *      --> mmap
+     * 3. Copy to memory
+     *      --> memcpy
+     */
     return (void *) vaddr_base;
 }
 
