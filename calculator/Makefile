@@ -1,3 +1,6 @@
+# please call this makefile using
+#    $ SHARED=YES make
+
 ifdef SHARED
 SHARED_CFLAGS = -fPIC
 SHARED_LDFLAGS = --shared
@@ -5,7 +8,13 @@ endif
 
 LDFLAGS_FOR_TEST = -L. -lcalc
 
-all: test
+all: run
+
+run: test
+	@LD_LIBRARY_PATH=. ./test
+
+test: test.o libcalc.so
+	$(CC) -o $@ $^ -L. -lcalc
 
 libcalc.a: add.o multiply.o
 	$(AR) -rs $@ $^
