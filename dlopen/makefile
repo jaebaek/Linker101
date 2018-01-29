@@ -1,10 +1,13 @@
-all: call_cosin
+all: run
 
-call_cosin: call_cosin.o
-	gcc -o call_cosin call_cosin.o -ldl
+run: call_libcalc
+	@./call_libcalc
 
-call_cosin.o: call_cosin.c
-	gcc -o call_cosin.o -c call_cosin.c
+call_libcalc: call_libcalc.o
+	gcc -o call_libcalc call_libcalc.o -ldl
+
+call_libcalc.o: call_libcalc.c
+	gcc -o call_libcalc.o -c call_libcalc.c
 
 clean:
-	rm -f *.o call_cosin
+	rm -f *.o call_libcalc
