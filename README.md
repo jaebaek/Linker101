@@ -7,8 +7,9 @@
 
 # To be added
 
-* Linking relocatables from c and assembly source files
+* [DONE] Linking relocatables from c and assembly source files
+    * See `linking_with_assembly`
 * Inline assembly
 * C preprocessing
 * Linker script
-* C built-in functions (e.g., __builtin_expect)
+* C built-in functions (e.g., `__builtin_expect`)
